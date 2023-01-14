@@ -1,0 +1,9 @@
+.ssh_connection_template:
+  before_script:
+    - 'command -v ssh-agent >/dev/null || ( apt update -y && apt install openssh-client -y )'
+    - eval $(ssh-agent -s)
+    - mkdir -p ~/.ssh
+    - cp "$GL_SSH_PRIVATE_KEY_FILE" ~/.ssh/id_ed25519
+    - chmod -R 600 ~/.ssh
+    - echo "$GL_SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+    - chmod 644 ~/.ssh/known_hosts

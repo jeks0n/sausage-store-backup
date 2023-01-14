@@ -1,0 +1,33 @@
+stages:
+  - init
+
+
+build-frontend-code-job:
+  stage: init
+  trigger:
+    include:
+      - "/frontend/.gitlab-ci.yml"
+    strategy: depend
+  only:
+    changes:
+      - frontend/**/*
+
+build-backend-code-job:
+  stage: init
+  trigger:
+    include:
+      - "/backend/.gitlab-ci.yml"
+    strategy: depend
+  only:
+    changes:
+      - backend/**/*
+
+build-backend-report-code-job:
+  stage: init
+  trigger:
+    include:
+      - "/backend-report/.gitlab-ci.yml"
+    strategy: depend
+  only:
+    changes:
+      - backend-report/**/*

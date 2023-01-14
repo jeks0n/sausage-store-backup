@@ -1,0 +1,27 @@
+[Unit]
+Description=Java backend simple service
+After=syslog.target network.target
+
+[Service]
+SuccessExitStatus=143
+
+User=jarservice
+Group=jarusers
+
+Type=simple
+
+EnvironmentFile=/etc/sausage-store/sausage-store.conf
+WorkingDirectory=/home/jarservice
+ExecStart=/usr/bin/java -jar sausage-store.jar \
+              --spring.datasource.url=jdbc:postgresql://${PSQL_HOST}:${PSQL_PORT}/${PSQL_DBNAME} \
+              --spring.datasource.username=${PSQL_USER} \
+              --spring.datasource.password=${PSQL_PASSWORD} \
+              --spring.flyway.baselineOnMigrate=${SPRING_FLYWAY_ENABLED} \
+              --spring.data.mongodb.uri=mongodb://${MONGO_USER}:${MONGO_PASSWORD}@${MONGO_HOST}:${MONGO_PORT}/${MONGO_DATABASE}?tls=true
+ExecStop=/bin/kill -15 $MAINPID
+StandardOutput=append:/opt/log/sausage-store-backend.log
+StandardError=append:/opt/log/sausage-store-backend.log
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

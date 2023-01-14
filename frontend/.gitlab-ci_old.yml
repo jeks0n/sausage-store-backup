@@ -1,0 +1,87 @@
+stages:
+  - build
+  - test
+  - release
+  - notify
+  - deploy
+
+include:
+  - template: Security/SAST.gitlab-ci.yml
+  - local: '.gitlab/.slack_notification_template.yml'
+  - local: '.gitlab/.ssh_connection_template.yml'
+
+variables:
+  VERSION: 1.0.${CI_PIPELINE_ID}
+
+cache:
+  key: frontend
+  paths:
+    - frontend/dist/frontend
+
+build-frontend-code-job:
+  stage: build
+  script:
+    - echo GE_FRONTEND_JOB_ID=$CI_JOB_ID >> frontend_environment.env
+    - cd frontend
+    - npm install
+    - npm run build
+  artifacts:
+    reports:
+      dotenv: frontend_environment.env
+
+sast:
+  stage: test
+  variables:
+    SAST_DEFAULT_ANALYZERS: eslint,semgrep,nodejs-scan
+    SAST_EXCLUDED_ANALYZERS: "spotbugs"
+
+sonarqube-frontend-sast:
+  stage: test
+  image: sonarsource/sonar-scanner-cli:latest
+  script:
+    - cd frontend
+    - >
+      sonar-scanner
+      -Dsonar.qualitygate.wait=true
+      -Dsonar.projectKey=${GL_SONAR_PROJECT_KEY_FRONTEND}
+      -Dsonar.sources=.
+      -Dsonar.host.url=${GL_SONAR_HOST_URL}
+      -Dsonar.login=${GL_SONAR_LOGIN_FRONTEND}
+
+upload-release:
+    stage: release
+    script:
+      - ls -la frontend
+      - cd frontend/dist
+      - tar czvf sausage-store-frontend-${VERSION}.tar.gz frontend
+      - >
+        curl -v -u "${GL_NEXUS_REPO_USER}:${GL_NEXUS_REPO_PASS}"
+        --upload-file sausage-store-frontend-${VERSION}.tar.gz
+        ${GL_NEXUS_REPO_URL_FRONTEND}/sausage-store/${VERSION}/sausage-store-frontend-${VERSION}.tar.gz
+
+slack-notification-frontend:
+  extends:
+    - .slack-notification_template
+  variables:
+    DOWNLOAD_LINK: ${GL_NEXUS_REPO_URL_FRONTEND}sausage-store/${VERSION}/sausage-store-frontend-${VERSION}.tar.gz
+    LINK_APP_NAME: "frontend"
+    ARTIFACT_JOB_ID: $GE_FRONTEND_JOB_ID
+
+deploy:
+  extends:
+    - .ssh_connection_template
+  stage: deploy
+  script:
+    - scp ./frontend/sausage-store-frontend.service ${GL_DEV_USER}@${GL_DEV_HOST}:/home/${GL_DEV_USER}/sausage-store-frontend.service
+    - ssh ${GL_DEV_USER}@${GL_DEV_HOST}
+      "export "CURRENT_VERSISON=${VERSION}";
+      export "VERSION=${VERSION}";
+      export "DEV_HOST=${GL_DEV_HOST}";
+      export "NEXUS_REPO_URL_FRONTEND=${GL_NEXUS_REPO_URL_FRONTEND}";
+      export "NEXUS_REPO_USER=${GL_NEXUS_REPO_USER}";
+      export "NEXUS_REPO_PASS=${GL_NEXUS_REPO_PASS}";
+      setsid /bin/bash -s " < ./frontend/deploy.sh
+  environment:
+    name: production-frontend
+    url: http://00.000.000.00:443/
+#  when: manual

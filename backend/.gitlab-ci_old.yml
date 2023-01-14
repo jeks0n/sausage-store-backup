@@ -1,0 +1,80 @@
+stages:
+  - build
+  - test
+  - release
+  - notify
+  - deploy
+
+include:
+  - template: Security/SAST.gitlab-ci.yml
+  - local: '.gitlab/.slack_notification_template.yml'
+  - local: '.gitlab/.ssh_connection_template.yml'
+
+variables:
+  VERSION: 1.0.${CI_PIPELINE_ID}
+
+cache:
+  key: backend
+  paths:
+    - ${CI_PROJECT_DIR}/.m2/repository
+
+build-backend-code-job:
+  stage: build
+  script:
+    - echo GE_BACKEND_JOB_ID=$CI_JOB_ID >> backend_environment.env
+    - cd backend
+    - mvn package -Dversion.application=${VERSION} -Dmaven.repo.local=${CI_PROJECT_DIR}/.m2/repository
+  artifacts:
+    reports:
+      dotenv: backend_environment.env
+
+sast:
+  stage: test
+  variables:
+    SAST_DEFAULT_ANALYZERS: semgrep,spotbugs
+    SAST_EXCLUDED_ANALYZERS: nodejs-scan,eslint-sast
+
+sonarqube-backend-sast:
+  stage: test
+  image: maven:3.8-openjdk-16
+  script:
+    - cd backend
+    - >
+      mvn verify sonar:sonar -Dsonar.qualitygate.wait=true
+      -Dsonar.projectKey=${GL_SONAR_PROJECT_KEY_BACKEND}
+      -Dsonar.host.url=${GL_SONAR_HOST_URL}
+      -Dsonar.login=${GL_SONAR_LOGIN_BACKEND}
+
+upload-backend-release:
+  stage: release
+  script:
+    - cd backend
+    - mvn -s settings.xml -Dversion.application=${VERSION} -DskipTests deploy
+
+slack-notification-backend:
+  extends:
+    - .slack-notification_template
+  variables:
+    DOWNLOAD_LINK: ${GL_NEXUS_REPO_URL_BACKEND}com/yandex/practicum/devops/sausage-store/${VERSION}/sausage-store-${VERSION}.jar
+    LINK_APP_NAME: "backend"
+    ARTIFACT_JOB_ID: $GE_BACKEND_JOB_ID
+
+deploy:
+  extends:
+    - .ssh_connection_template
+  stage: deploy
+  script:
+    - scp ./backend/sausage-store-backend.service ${GL_DEV_USER}@${GL_DEV_HOST}:/home/${GL_DEV_USER}/sausage-store-backend.service
+    - scp "$GLF_SERVICE_CONF" ${GL_DEV_USER}@${GL_DEV_HOST}:~/sausage-store.conf
+    - ssh ${GL_DEV_USER}@${GL_DEV_HOST}
+      "export "CURRENT_VERSISON=${VERSION}";
+      export "VERSION=${VERSION}";
+      export "DEV_HOST=${GL_DEV_HOST}";
+      export "NEXUS_REPO_URL_BACKEND=${GL_NEXUS_REPO_URL_BACKEND}";
+      export "NEXUS_REPO_USER=${GL_NEXUS_REPO_USER}";
+      export "NEXUS_REPO_PASS=${GL_NEXUS_REPO_PASS}";
+      setsid /bin/bash -s " < ./backend/deploy.sh
+  environment:
+    name: production-backend
+    url: http://00.000.000.00:443/
+#  when: manual

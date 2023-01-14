@@ -1,0 +1,16 @@
+#!/bin/bash
+set +e
+cat > .env.backend <<EOF
+SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}
+SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
+SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+SPRING_DATA_MONGODB_URI=${SPRING_DATA_MONGODB_URI}
+LOG_PATH=/opt/log/
+REPORT_PATH=/opt/log/
+EOF
+docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+docker pull $CI_REGISTRY_IMAGE/$GL_DOCKER_IMAGE_BACKEND_NAME:latest
+docker stop backend || true
+docker rm backend || true
+set -e
+docker-compose --env-file .env.backend up -d backend

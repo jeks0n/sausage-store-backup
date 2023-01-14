@@ -1,0 +1,20 @@
+.slack-notification_template:
+  stage: notify
+  variables:
+    DOWNLOAD_LINK: "undefined"
+    LINK_APP_NAME: "undefined"
+    ARTIFACT_JOB_ID: "undefined"
+  script:
+    - SH_PRETTY_URL="<${DOWNLOAD_LINK}|${LINK_APP_NAME}>"
+    - |-
+        SH_DATA=$(cat << JSON
+        {
+          "text":"Вышла новая версия $LINK_APP_NAME сосисочной — $VERSION. Скачать $LINK_APP_NAME можно по ссылке — $SH_PRETTY_URL"
+        }
+        JSON
+        )
+    - >
+      curl -X POST
+      -H 'Content-type: application/json'
+      --data "${SH_DATA}"
+      https://hooks.slack.com/services/TPV9DP0N4/B044G9WQ1U4/"${GL_SLACK_TOKEN}"
